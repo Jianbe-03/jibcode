@@ -12,14 +12,14 @@ compiler: compiler.o
 compiler.o: compiler.s
 	clang -c compiler.s -o compiler.o
 
-output.s: compiler ../../../input.jibcode
-	./compiler ../../../input.jibcode > $(OUTPUT_DIR)/output.s
+output.s: compiler ../../input.jibcode
+	./compiler ../../input.jibcode > $(OUTPUT_DIR)/output.s
 
-outputerror.s: compiler ../../../test_error.jibcode
-	./compiler ../../../test_error.jibcode > $(OUTPUT_DIR)/outputerror.s
+outputerror.s: compiler ../../test_error.jibcode
+	./compiler ../../test_error.jibcode > $(OUTPUT_DIR)/outputerror.s
 
-outputif.s: compiler ../../../test_if.jibcode
-	./compiler ../../../test_if.jibcode > $(OUTPUT_DIR)/outputif.s
+outputif.s: compiler ../../test_if.jibcode
+	./compiler ../../test_if.jibcode > $(OUTPUT_DIR)/outputif.s
 
 compile: output.s
 	clang $(OUTPUT_DIR)/output.s -o $(OUTPUT_DIR)/input
