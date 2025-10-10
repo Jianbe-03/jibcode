@@ -1,0 +1,4 @@
+*
+!.gitignore
+!compiler.s
+!Makefile
