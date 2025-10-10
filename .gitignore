@@ -1,7 +1,9 @@
-./PrintHelloWorld.s
-./InputOutput.s
-./compiler
-./compiler.s
-./input
-./ROADMAP.md
-./main.s
+PrintHelloWorld.s
+InputOutput.s
+compiler
+compiler.s
+compiler.o
+input
+output.s
+ROADMAP.md
+main.s
