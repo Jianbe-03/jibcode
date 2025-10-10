@@ -263,15 +263,29 @@ found_if_cond:
     add x22, x22, #1
     mov x24, x22  // Start of condition
     mov x25, #0   // Length
-    
-    // Find closing }
+    mov x26, #1   // Brace depth (already inside one opening brace)
+
+    // Find closing } while respecting nested braces
 find_cond_end:
     add x23, x22, x25
     cmp x23, x20
     b.ge parse_error
     ldrb w0, [x21, x23]
+    cmp w0, #'{'
+    b.eq cond_depth_inc
     cmp w0, #'}'
-    b.eq eval_if_condition
+    b.eq cond_depth_dec
+    add x25, x25, #1
+    b find_cond_end
+
+cond_depth_inc:
+    add x26, x26, #1
+    add x25, x25, #1
+    b find_cond_end
+
+cond_depth_dec:
+    sub x26, x26, #1
+    cbz x26, eval_if_condition
     add x25, x25, #1
     b find_cond_end
 
@@ -303,17 +317,17 @@ eval_cond_loop:
     cmp w0, #'a'
     b.lt cond_check_upper
     cmp w0, #'z'
-    b.le cond_var_plain
+    b.le cond_invalid_token
 
 cond_check_upper:
     cmp w0, #'A'
     b.lt cond_check_underscore
     cmp w0, #'Z'
-    b.le cond_var_plain
+    b.le cond_invalid_token
 
 cond_check_underscore:
     cmp w0, #'_'
-    b.eq cond_var_plain
+    b.eq cond_invalid_token
     
     // Check for operators
     cmp w0, #'+'
@@ -421,14 +435,56 @@ store_cond_first:
     mov x6, x9
     b eval_cond_loop
 
+cond_invalid_token:
+    // Skip over an identifier-like token and treat as zero literal
+    mov x9, #0
+cond_invalid_loop:
+    add x10, x23, x9
+    sub x11, x10, x24
+    cmp x11, x25
+    b.ge cond_invalid_done
+    ldrb w1, [x21, x10]
+    cmp w1, #' '
+    b.eq cond_invalid_done
+    cmp w1, #'\t'
+    b.eq cond_invalid_done
+    cmp w1, #'+' 
+    b.eq cond_invalid_done
+    cmp w1, #'-'
+    b.eq cond_invalid_done
+    cmp w1, #'*'
+    b.eq cond_invalid_done
+    cmp w1, #'/'
+    b.eq cond_invalid_done
+    cmp w1, #'%'
+    b.eq cond_invalid_done
+    cmp w1, #'<'
+    b.eq cond_invalid_done
+    cmp w1, #'>'
+    b.eq cond_invalid_done
+    cmp w1, #'='
+    b.eq cond_invalid_done
+    cmp w1, #'!'
+    b.eq cond_invalid_done
+    cmp w1, #'}'
+    b.eq cond_invalid_done
+    add x9, x9, #1
+    b cond_invalid_loop
+
+cond_invalid_done:
+    add x5, x5, x9
+    cmp x8, #0
+    b.eq store_cond_invalid_first
+    mov x4, #0
+    b apply_cond_op
+
+store_cond_invalid_first:
+    mov x6, #0
+    b eval_cond_loop
+
 cond_var_ref:
     // Parse variable reference wrapped in {}
     add x5, x5, #1
-    add x23, x24, x5
-    b cond_var_count_start
-
-cond_var_plain:
-    // Parse variable reference without {}
     add x23, x24, x5
     b cond_var_count_start
 

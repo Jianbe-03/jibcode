@@ -1,6 +1,6 @@
 printTo(terminal);
 
-var x = 20;
+var x = 15;
 var y = 4;
 var sum = {x} + {y};
 var mod = {x} % {y};
@@ -13,7 +13,7 @@ print "mod = "{mod};
 print "eq = "{eq};
 print "gt = "{gt};
 
-if {x == 15} {
+if {{x} == 15} {
     print "x is equal to 15";
 } else {
     print "x is NOT equal to 15";
