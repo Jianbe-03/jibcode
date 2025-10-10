@@ -70,9 +70,25 @@ print "x > y: "{isGreater};
 # Compile JibCode to assembly
 make
 
+make compile
+
 # Run the compiled program
-./input
+make run
 ```
+
+This will build a ARM64 assembly program and run it.
+
+If you want a different supported architecture you can for example do:
+
+```bash
+make ARCH=x86_60
+
+make compile ARCH=x86_60
+
+make run ARCH=x86_60
+```
+
+Currently only ARM64 is supported.
 
 ## Roadmap
 

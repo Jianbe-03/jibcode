@@ -51,17 +51,24 @@ test: compile
 	$(MAKE) -C $(ARCH_DIR) test
 	@echo "Test completed for $(ARCH)."
 
+# Run the compiled program
+run: compile
+	@echo "Running compiled program for $(ARCH)..."
+	$(MAKE) -C $(ARCH_DIR) run
+	@echo "Program executed for $(ARCH)."
+
 # Help
 help:
 	@echo "Usage: make [ARCH=<arch>] [target]"
 	@echo "Supported ARCH: $(SUPPORTED_ARCHS)"
 	@echo "Targets:"
 	@echo "  all          - Build compiler (default)"
-	@echo "  buildCompiler - Build the compiler binary"
+	@echo "  compiler     - Build the compiler binary"
 	@echo "  compile      - Compile JibCode to assembly and executable"
+	@echo "  run          - Compile and run the JibCode program"
 	@echo "  clean        - Clean build artifacts for specified ARCH"
 	@echo "  clean-all    - Clean all architectures"
 	@echo "  test         - Build, compile, and run tests"
 	@echo "Examples:"
-	@echo "  make ARCH=arm64 compile"
+	@echo "  make ARCH=arm64 run"
 	@echo "  make clean ARCH=arm64"

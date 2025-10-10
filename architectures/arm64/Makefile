@@ -1,7 +1,6 @@
 ARCH := arm64
-OUTPUT_DIR := ../../../outputs/$(ARCH)
+OUTPUT_DIR := ../../outputs/$(ARCH)
 
-# Ensure output directory exists
 $(shell mkdir -p $(OUTPUT_DIR))
 
 all: compiler
@@ -34,4 +33,8 @@ test_if: outputif.s
 	clang $(OUTPUT_DIR)/outputif.s -o $(OUTPUT_DIR)/input
 
 test: compile
+	$(OUTPUT_DIR)/input
+
+run: compile
+	@echo "Running $(OUTPUT_DIR)/input..."
 	$(OUTPUT_DIR)/input
