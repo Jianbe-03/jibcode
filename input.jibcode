@@ -1,0 +1,14 @@
+printTo(terminal);
+
+var x = 15;
+var y = 4;
+var sum = {x} + {y};
+var mod = {x} % {y};
+var eq = {x} == {y};
+var gt = {x} > {y};
+
+print "Math:";
+print "sum = "{sum};
+print "mod = "{mod};
+print "eq = "{eq};
+print "gt = "{gt};
