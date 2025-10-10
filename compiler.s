@@ -11,6 +11,9 @@ _main:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     
+    // Initialize nesting depth counter
+    mov x9, #0
+    
     // Check if we have a command-line argument for filename
     // x0 = argc, x1 = argv
     // Default to "input.jibcode" if no argument provided
@@ -207,8 +210,609 @@ parse_loop:
     cmp x22, x20
     b.ge done_parsing
 
-    // TODO: if statements not yet implemented - skip for now
-    // b check_print_keyword
+    // Check for "if" keyword
+    add x23, x22, #2
+    cmp x23, x20
+    b.gt check_print_keyword
+    
+    ldrb w0, [x21, x22]
+    cmp w0, #'i'
+    b.ne check_print_keyword
+    
+    add x23, x22, #1
+    ldrb w0, [x21, x23]
+    cmp w0, #'f'
+    b.ne check_print_keyword
+    
+    // Check next char is whitespace or {
+    add x23, x22, #2
+    cmp x23, x20
+    b.ge parse_if
+    ldrb w0, [x21, x23]
+    cmp w0, #' '
+    b.eq parse_if
+    cmp w0, #'\t'
+    b.eq parse_if
+    cmp w0, #'{'
+    b.eq parse_if
+    b check_print_keyword
+
+parse_if:
+    // Skip "if" and find condition
+    add x22, x22, #2
+    
+    // Skip whitespace
+skip_if_ws:
+    cmp x22, x20
+    b.ge parse_error
+    ldrb w0, [x21, x22]
+    cmp w0, #' '
+    b.eq skip_if_ws_inc
+    cmp w0, #'\t'
+    b.eq skip_if_ws_inc
+    cmp w0, #'{'
+    b.eq found_if_cond
+    b parse_error
+
+skip_if_ws_inc:
+    add x22, x22, #1
+    b skip_if_ws
+
+found_if_cond:
+    // x22 points to opening { of condition
+    add x22, x22, #1
+    mov x24, x22  // Start of condition
+    mov x25, #0   // Length
+    
+    // Find closing }
+find_cond_end:
+    add x23, x22, x25
+    cmp x23, x20
+    b.ge parse_error
+    ldrb w0, [x21, x23]
+    cmp w0, #'}'
+    b.eq eval_if_condition
+    add x25, x25, #1
+    b find_cond_end
+
+eval_if_condition:
+    // Evaluate condition (reuse expression evaluator)
+    // x24 = condition start, x25 = length
+    mov x4, #0   // Second operand
+    mov x5, #0   // Position in condition
+    mov x6, #0   // Result
+    mov x7, #0   // Operator
+    mov x8, #0   // Have operator flag
+    
+eval_cond_loop:
+    cmp x5, x25
+    b.ge cond_done
+    
+    add x23, x24, x5
+    ldrb w0, [x21, x23]
+    
+    // Skip whitespace
+    cmp w0, #' '
+    b.eq cond_skip_ws
+    cmp w0, #'\t'
+    b.eq cond_skip_ws
+    
+    // Check for variable reference
+    cmp w0, #'{'
+    b.eq cond_var_ref
+    cmp w0, #'a'
+    b.lt cond_check_upper
+    cmp w0, #'z'
+    b.le cond_var_plain
+
+cond_check_upper:
+    cmp w0, #'A'
+    b.lt cond_check_underscore
+    cmp w0, #'Z'
+    b.le cond_var_plain
+
+cond_check_underscore:
+    cmp w0, #'_'
+    b.eq cond_var_plain
+    
+    // Check for operators
+    cmp w0, #'+'
+    b.eq cond_op_single
+    cmp w0, #'-'
+    b.eq cond_op_single
+    cmp w0, #'*'
+    b.eq cond_op_single
+    cmp w0, #'/'
+    b.eq cond_op_single
+    cmp w0, #'%'
+    b.eq cond_op_single
+    cmp w0, #'<'
+    b.eq cond_op_maybe_double
+    cmp w0, #'>'
+    b.eq cond_op_maybe_double
+    cmp w0, #'='
+    b.eq cond_op_must_double
+    cmp w0, #'!'
+    b.eq cond_op_must_double
+    
+    // Must be a number
+    b cond_parse_num
+
+cond_skip_ws:
+    add x5, x5, #1
+    b eval_cond_loop
+
+cond_op_single:
+    mov x7, x0
+    mov x8, #1
+    add x5, x5, #1
+    b eval_cond_loop
+
+cond_op_maybe_double:
+    // Check if next char is =
+    add x23, x24, x5
+    add x23, x23, #1
+    cmp x23, x20
+    b.ge cond_op_single
+    ldrb w1, [x21, x23]
+    cmp w1, #'='
+    b.ne cond_op_single
+    // It's <= or >=
+    cmp w0, #'<'
+    b.eq set_cond_le
+    mov x7, #259  // >=
+    mov x8, #1
+    add x5, x5, #2
+    b eval_cond_loop
+
+set_cond_le:
+    mov x7, #258  // <=
+    mov x8, #1
+    add x5, x5, #2
+    b eval_cond_loop
+
+cond_op_must_double:
+    // Must be == or !=
+    add x23, x24, x5
+    add x23, x23, #1
+    cmp x23, x20
+    b.ge parse_error
+    ldrb w1, [x21, x23]
+    cmp w1, #'='
+    b.ne parse_error
+    cmp w0, #'='
+    b.eq set_cond_eq
+    mov x7, #257  // !=
+    mov x8, #1
+    add x5, x5, #2
+    b eval_cond_loop
+
+set_cond_eq:
+    mov x7, #256  // ==
+    mov x8, #1
+    add x5, x5, #2
+    b eval_cond_loop
+
+cond_parse_num:
+    mov x9, #0
+cond_digit_loop:
+    cmp x5, x25
+    b.ge cond_num_done
+    add x23, x24, x5
+    ldrb w0, [x21, x23]
+    cmp w0, #'0'
+    b.lt cond_num_done
+    cmp w0, #'9'
+    b.gt cond_num_done
+    mov x10, #10
+    mul x9, x9, x10
+    sub x0, x0, #'0'
+    add x9, x9, x0
+    add x5, x5, #1
+    b cond_digit_loop
+
+cond_num_done:
+    cmp x8, #0
+    b.eq store_cond_first
+    mov x4, x9
+    b apply_cond_op
+
+store_cond_first:
+    mov x6, x9
+    b eval_cond_loop
+
+cond_var_ref:
+    // Parse variable reference wrapped in {}
+    add x5, x5, #1
+    add x23, x24, x5
+    b cond_var_count_start
+
+cond_var_plain:
+    // Parse variable reference without {}
+    add x23, x24, x5
+    b cond_var_count_start
+
+cond_var_count_start:
+    mov x9, #0
+
+cond_var_count_loop:
+    add x10, x23, x9
+    // Bounds check - make sure we don't read past condition end
+    sub x11, x10, x24  // x11 = offset from condition start
+    cmp x11, x25  // Compare with condition length
+    b.ge lookup_cond_var  // If we've gone past condition end, treat as end of name
+    ldrb w0, [x21, x10]
+    // Variable name ends at space, tab, operator, or closing brace
+    cmp w0, #' '
+    b.eq lookup_cond_var
+    cmp w0, #'	'
+    b.eq lookup_cond_var
+    cmp w0, #'+'
+    b.eq lookup_cond_var
+    cmp w0, #'-'
+    b.eq lookup_cond_var
+    cmp w0, #'*'
+    b.eq lookup_cond_var
+    cmp w0, #'/'
+    b.eq lookup_cond_var
+    cmp w0, #'%'
+    b.eq lookup_cond_var
+    cmp w0, #'<'
+    b.eq lookup_cond_var
+    cmp w0, #'>'
+    b.eq lookup_cond_var
+    cmp w0, #'='
+    b.eq lookup_cond_var
+    cmp w0, #'!'
+    b.eq lookup_cond_var
+    cmp w0, #'}'
+    b.eq lookup_cond_var
+    add x9, x9, #1
+    b cond_var_count_loop
+
+lookup_cond_var:
+    // Look up variable: x23 = var name start, x9 = length
+    mov x10, #0
+find_cond_var_loop:
+    cmp x10, x14
+    b.ge parse_error
+    mov x11, x10
+    lsl x11, x11, #6
+    add x11, x13, x11
+    mov x12, #0
+cmp_cond_var_loop:
+    cmp x12, x9
+    b.ge check_cond_var_match
+    ldrb w0, [x11, x12]
+    add x15, x23, x12
+    ldrb w1, [x21, x15]
+    cmp w0, w1
+    b.ne next_cond_var
+    add x12, x12, #1
+    b cmp_cond_var_loop
+
+check_cond_var_match:
+    ldrb w0, [x11, x12]
+    cbz w0, found_cond_var
+next_cond_var:
+    add x10, x10, #1
+    b find_cond_var_loop
+
+found_cond_var:
+    // Get variable value
+    mov x11, x10
+    lsl x11, x11, #6
+    add x11, x11, #32
+    add x11, x13, x11
+    mov x12, #0
+    mov x15, #0
+cond_var_to_num:
+    ldrb w0, [x11, x15]
+    cbz w0, cond_var_num_done
+    cmp w0, #'0'
+    b.lt cond_var_num_done
+    cmp w0, #'9'
+    b.gt cond_var_num_done
+    mov x16, #10
+    mul x12, x12, x16
+    sub x0, x0, #'0'
+    add x12, x12, x0
+    add x15, x15, #1
+    b cond_var_to_num
+
+cond_var_num_done:
+    add x5, x5, x9  // Skip past variable name (no closing } in condition)
+    // Skip optional closing brace if variable was wrapped in {}
+    cmp x5, x25
+    b.ge cond_var_after_skip
+    add x23, x24, x5
+    ldrb w0, [x21, x23]
+    cmp w0, #'}'
+    b.ne cond_var_after_skip
+    add x5, x5, #1
+
+cond_var_after_skip:
+    cmp x8, #0
+    b.eq store_cond_first_var
+    mov x4, x12
+    b apply_cond_op
+
+store_cond_first_var:
+    mov x6, x12
+    b eval_cond_loop
+
+apply_cond_op:
+    // Apply operator: x6 op x4 -> x6
+    cmp x7, #'+'
+    b.eq cond_add
+    cmp x7, #'-'
+    b.eq cond_sub
+    cmp x7, #'*'
+    b.eq cond_mul
+    cmp x7, #'/'
+    b.eq cond_div
+    cmp x7, #'%'
+    b.eq cond_mod
+    cmp x7, #256
+    b.eq cond_eq
+    cmp x7, #257
+    b.eq cond_ne
+    cmp x7, #'<'
+    b.eq cond_lt
+    cmp x7, #'>'
+    b.eq cond_gt
+    cmp x7, #258
+    b.eq cond_le
+    cmp x7, #259
+    b.eq cond_ge
+    b eval_cond_loop
+
+cond_add:
+    add x6, x6, x4
+    mov x8, #0
+    b eval_cond_loop
+cond_sub:
+    sub x6, x6, x4
+    mov x8, #0
+    b eval_cond_loop
+cond_mul:
+    mul x6, x6, x4
+    mov x8, #0
+    b eval_cond_loop
+cond_div:
+    udiv x6, x6, x4
+    mov x8, #0
+    b eval_cond_loop
+cond_mod:
+    udiv x10, x6, x4
+    msub x6, x10, x4, x6
+    mov x8, #0
+    b eval_cond_loop
+cond_eq:
+    cmp x6, x4
+    cset x6, eq
+    mov x8, #0
+    b eval_cond_loop
+cond_ne:
+    cmp x6, x4
+    cset x6, ne
+    mov x8, #0
+    b eval_cond_loop
+cond_lt:
+    cmp x6, x4
+    cset x6, lt
+    mov x8, #0
+    b eval_cond_loop
+cond_gt:
+    cmp x6, x4
+    cset x6, gt
+    mov x8, #0
+    b eval_cond_loop
+cond_le:
+    cmp x6, x4
+    cset x6, le
+    mov x8, #0
+    b eval_cond_loop
+cond_ge:
+    cmp x6, x4
+    cset x6, ge
+    mov x8, #0
+    b eval_cond_loop
+
+cond_done:
+    // x6 has condition result (0=false, nonzero=true)
+    // Move past condition } and find if block
+    add x22, x24, x25
+    add x22, x22, #1  // Skip }
+    
+    // Skip whitespace to find if block {
+skip_to_if_block:
+    cmp x22, x20
+    b.ge parse_error
+    ldrb w0, [x21, x22]
+    cmp w0, #' '
+    b.eq skip_to_if_block_inc
+    cmp w0, #'\t'
+    b.eq skip_to_if_block_inc
+    cmp w0, #'{'
+    b.eq found_if_block
+    b parse_error
+
+skip_to_if_block_inc:
+    add x22, x22, #1
+    b skip_to_if_block
+
+found_if_block:
+    // x22 points to { of if block
+    add x22, x22, #1
+    mov x24, x22  // Start of if block content
+    mov x25, #0   // Length
+    mov x26, #1   // Brace depth
+    
+    // Find matching closing }
+find_if_block_end:
+    add x23, x22, x25
+    cmp x23, x20
+    b.ge parse_error
+    ldrb w0, [x21, x23]
+    cmp w0, #'{'
+    b.eq if_open_brace
+    cmp w0, #'}'
+    b.eq if_close_brace
+    add x25, x25, #1
+    b find_if_block_end
+
+if_open_brace:
+    add x26, x26, #1
+    add x25, x25, #1
+    b find_if_block_end
+
+if_close_brace:
+    sub x26, x26, #1
+    cbz x26, if_block_complete
+    add x25, x25, #1
+    b find_if_block_end
+
+if_block_complete:
+    // x24 = if block start, x25 = if block length, x6 = condition result
+    // Move past if block
+    add x22, x24, x25
+    add x22, x22, #1  // Position after }
+    
+    // Check for else
+    mov x27, x22  // Save position after if
+    
+skip_to_else:
+    cmp x22, x20
+    b.ge check_if_result
+    ldrb w0, [x21, x22]
+    cmp w0, #' '
+    b.eq skip_to_else_inc
+    cmp w0, #'\t'
+    b.eq skip_to_else_inc
+    cmp w0, #'\n'
+    b.eq skip_to_else_inc
+    
+    // Check for "else"
+    add x23, x22, #4
+    cmp x23, x20
+    b.gt check_if_result
+    ldrb w0, [x21, x22]
+    cmp w0, #'e'
+    b.ne check_if_result
+    add x23, x22, #1
+    ldrb w0, [x21, x23]
+    cmp w0, #'l'
+    b.ne check_if_result
+    add x23, x22, #2
+    ldrb w0, [x21, x23]
+    cmp w0, #'s'
+    b.ne check_if_result
+    add x23, x22, #3
+    ldrb w0, [x21, x23]
+    cmp w0, #'e'
+    b.ne check_if_result
+    
+    // Found else - skip "else" and find else block
+    add x22, x22, #4
+    b skip_to_else_block
+
+skip_to_else_inc:
+    add x22, x22, #1
+    b skip_to_else
+
+skip_to_else_block:
+    cmp x22, x20
+    b.ge parse_error
+    ldrb w0, [x21, x22]
+    cmp w0, #' '
+    b.eq skip_to_else_block_inc
+    cmp w0, #'\t'
+    b.eq skip_to_else_block_inc
+    cmp w0, #'{'
+    b.eq found_else_block
+    b parse_error
+
+skip_to_else_block_inc:
+    add x22, x22, #1
+    b skip_to_else_block
+
+found_else_block:
+    // x22 points to { of else block
+    add x22, x22, #1
+    mov x27, x22  // Start of else block
+    mov x16, #0   // Length
+    mov x26, #1   // Brace depth
+    
+find_else_block_end:
+    add x23, x22, x16
+    cmp x23, x20
+    b.ge parse_error
+    ldrb w0, [x21, x23]
+    cmp w0, #'{'
+    b.eq else_open_brace
+    cmp w0, #'}'
+    b.eq else_close_brace
+    add x16, x16, #1
+    b find_else_block_end
+
+else_open_brace:
+    add x26, x26, #1
+    add x16, x16, #1
+    b find_else_block_end
+
+else_close_brace:
+    sub x26, x26, #1
+    cbz x26, else_block_complete
+    add x16, x16, #1
+    b find_else_block_end
+
+else_block_complete:
+    // x27 = else block start, x16 = else block length
+    // Move past else block
+    add x22, x27, x16
+    add x22, x22, #1
+    
+    // Now decide which block to include
+    cbz x6, include_else_block
+    // Condition true - include if block (x24, x25)
+    mov x27, x24
+    mov x16, x25
+    b include_chosen_block
+
+include_else_block:
+    // Condition false - x27 and x28 already have else block
+    
+include_chosen_block:
+    // Copy chosen block content to continue parsing
+    // x27 = start of chosen block, x16 = length of chosen block
+    // x22 = position after entire if/else statement
+    // x20 = original end of input (we need to save this!)
+    
+    add x18, x18, #1  // Increment nesting depth
+    stp x22, x20, [sp, #-16]!  // Save position after if/else and original end
+    
+    mov x22, x27  // Start parsing from chosen block
+    add x20, x27, x16  // Parse until end of chosen block
+    b parse_loop
+
+check_if_result:
+    // No else block - just use if block if condition is true
+    cbz x6, skip_if_only
+    // Include if block
+    // x24 = if block start, x25 = if block length
+    // x27 = position after if block
+    // x20 = original end
+    add x18, x18, #1  // Increment nesting depth
+    stp x27, x20, [sp, #-16]!  // Save position after if and original end
+    mov x22, x24  // Start of if block
+    add x20, x24, x25  // End of if block
+    b parse_loop
+
+skip_if_only:
+    // Skip if block entirely
+    mov x22, x27
+    b parse_loop
 
 check_print_keyword:
     cmp x23, x20
@@ -1015,6 +1619,15 @@ copy_done:
     b parse_loop
 
 done_parsing:
+    // Check if we're in a nested if/else block
+    cbz x18, truly_done_parsing
+    
+    // We were in a nested block - restore and continue
+    sub x18, x18, #1
+    ldp x22, x20, [sp], #16
+    b parse_loop
+
+truly_done_parsing:
     // Remove the last \n (2 chars) if we added any strings
     cmp x29, #1
     b.le parse_error
@@ -1129,6 +1742,7 @@ zero:
 
 .data
 default_filename: .asciz "input.jibcode"
+initial_sp: .quad 0            // Store initial stack pointer
 inputBuffer: .space 4096       // Increased from 1024
 outputBuffer: .space 8192      // Increased from 2048
 varBuffer: .space 2560         // 40 variables max (was 10), 64 bytes each
