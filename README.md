@@ -77,6 +77,8 @@ make
 ## Roadmap
 
 ### Coming Soon
+- [ ] Nested if/else statements
+- [ ] Multi mathematical operations in a single var
 - [ ] Comments (// and /* */)
 - [ ] Loops (while, for)
 - [ ] Functions
