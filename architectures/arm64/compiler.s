@@ -210,6 +210,11 @@ parse_loop:
     cmp x22, x20
     b.ge done_parsing
 
+    // Check for comments first
+    ldrb w0, [x21, x22]
+    cmp w0, #'/'
+    b.eq check_comment
+
     // Check for "if" keyword
     add x23, x22, #2
     cmp x23, x20
@@ -236,6 +241,57 @@ parse_loop:
     cmp w0, #'{'
     b.eq parse_if
     b check_print_keyword
+
+check_comment:
+    // Check if this is // or /*
+    add x23, x22, #1
+    cmp x23, x20
+    b.ge parse_error  // Single / at end of file
+    
+    ldrb w0, [x21, x23]
+    cmp w0, #'/'  // Single line comment //
+    b.eq skip_single_comment
+    cmp w0, #'*'  // Multi line comment /*
+    b.eq skip_multi_comment
+    b parse_error  // Just a single / which is invalid
+
+skip_single_comment:
+    // Skip until end of line or end of file
+    add x22, x22, #2  // Skip the //
+skip_single_loop:
+    cmp x22, x20
+    b.ge parse_loop
+    ldrb w0, [x21, x22]
+    cmp w0, #'\n'
+    b.eq skip_single_done
+    add x22, x22, #1
+    b skip_single_loop
+skip_single_done:
+    add x22, x22, #1  // Skip the newline
+    b parse_loop
+
+skip_multi_comment:
+    // Skip until */ or end of file
+    add x22, x22, #2  // Skip the /*
+skip_multi_loop:
+    cmp x22, x20
+    b.ge parse_error  // Unclosed comment
+    ldrb w0, [x21, x22]
+    cmp w0, #'*'
+    b.ne skip_multi_next
+    // Check if next char is /
+    add x23, x22, #1
+    cmp x23, x20
+    b.ge parse_error  // * at end of file
+    ldrb w0, [x21, x23]
+    cmp w0, #'/'
+    b.eq skip_multi_done
+skip_multi_next:
+    add x22, x22, #1
+    b skip_multi_loop
+skip_multi_done:
+    add x22, x22, #2  // Skip the */
+    b parse_loop
 
 parse_if:
     // Skip "if" and find condition

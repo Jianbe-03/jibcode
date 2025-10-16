@@ -36,6 +36,31 @@ if {{x} == 15} {
 }
 ```
 
+✅ **Nested If/Else Statements**
+- Full support for nested if/else blocks
+- Example:
+```jibcode
+if {{x} > 10} {
+    print "x is greater than 10";
+    if {{x} > 20} {
+        print "x is also greater than 20";
+    } else {
+        print "x is between 10 and 20";
+    }
+} else {
+    print "x is 10 or less";
+}
+```
+
+✅ **Multi-Operation Expressions**
+- Support for multiple operations in a single expression
+- Example: `var result = {a} + {b} + {c} - {d};`
+- Note: Currently evaluates left-to-right (no operator precedence yet)
+
+✅ **Comments**
+- Single-line comments: `// This is a comment`
+- Multi-line comments: `/* This is a multi-line comment */`
+
 ✅ **String Concatenation**
 - `print "Hello, "{name}"!";`
 
@@ -93,12 +118,14 @@ Currently only ARM64 is supported.
 ## Roadmap
 
 ### Coming Soon
-- [ ] Nested if/else statements
-- [ ] Multi mathematical operations in a single var
-- [ ] Comments (// and /* */)
+- [ ] Operator precedence (e.g., `*` and `/` before `+` and `-`)
+- [ ] Parentheses support in expressions
 - [ ] Loops (while, for)
 - [ ] Functions
 - [ ] Arrays
+- [ ] Boolean operators (&&, ||, !)
+- [ ] More architectures (x86_64, RISC-V)
+- [ ] or/and operations for if/else statements
 
 ## Architecture
 

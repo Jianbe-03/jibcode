@@ -1,5 +1,6 @@
 printTo(terminal);
 
+// defining variables is very easy...
 var x = 15;
 var y = 4;
 var sum = {x} + {y};
@@ -13,8 +14,18 @@ print "mod = "{mod};
 print "eq = "{eq};
 print "gt = "{gt};
 
+/* if i want i can also do some if statements
+these if statements can also be nested!
+and look at this multi line comment 
+jibcode is the best */
+
 if {{x} == 15} {
     print "x is equal to 15";
+    if {{y} == 4} {
+        print "y is equal to 4";
+    } else {
+        print "y is not 4?!?";
+    }
 } else {
     print "x is NOT equal to 15";
 }
